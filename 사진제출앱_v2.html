@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>식물 관찰 사진 제출</title>
+
+<!-- ============================================================
+     🟦 1단계 — 앱 기본 설정 (이 따옴표 안 글자만 바꾸세요)
+     ============================================================ -->
+<script>
+  const APP_CONFIG = {
+    title: "식물 관찰 사진 제출",
+    studentNotice: "관찰한 식물 사진을 최대 4장 올리고, 사진마다 설명을 적어 주세요.",
+    teacherInitialPassword: "1234"   // 교사 초기 비밀번호
+  };
+</script>
+
+<!-- ============================================================
+     🟧 2단계 — 파이어베이스 설정 (콘솔에서 복사한 내용을 { } 안에 통째로 붙여넣으세요)
+     비어 있으면 자동으로 "혼자 쓰기 모드"로 작동합니다.
+     ============================================================ -->
+<script>
+  const firebaseConfig = {
+    // 여기에 붙여넣기
+  };
+</script>
+
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: #f5f6f8;
+    color: #1f2937;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header {
+    background: #2563eb;
+    color: white;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 { margin: 0; font-size: 18px; }
+  #statusBadge {
+    font-size: 13px;
+    background: rgba(255,255,255,0.2);
+    padding: 6px 12px;
+    border-radius: 999px;
+  }
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+  .hidden { display: none !important; }
+
+  .role-pick { display: grid; gap: 14px; margin-top: 30px; }
+  .role-btn {
+    padding: 28px 20px;
+    font-size: 20px;
+    font-weight: 700;
+    border: 2px solid #e5e7eb;
+    background: white;
+    border-radius: 14px;
+    cursor: pointer;
+  }
+  .role-btn:hover { border-color: #2563eb; }
+
+  .notice {
+    background: #eff6ff;
+    border-left: 4px solid #2563eb;
+    padding: 12px 14px;
+    border-radius: 6px;
+    margin-bottom: 18px;
+    color: #1e3a8a;
+  }
+  label { display: block; margin-top: 14px; font-weight: 600; font-size: 15px; }
+  input[type="text"], input[type="password"], textarea {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-top: 6px;
+    font-family: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: #2563eb; }
+
+  .file-area {
+    margin-top: 6px;
+    border: 2px dashed #cbd5e1;
+    padding: 16px;
+    border-radius: 10px;
+    background: white;
+  }
+  .file-area .pick {
+    text-align: center;
+  }
+  .file-area input { display: none; }
+  .fileLabel {
+    display: inline-block;
+    background: #2563eb;
+    color: white;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 0 !important;
+    font-size: 15px;
+  }
+
+  /* 사진 + 설명 카드 (학생 입력용) */
+  .photo-items {
+    display: grid;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .photo-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 10px;
+    align-items: start;
+  }
+  .photo-item .thumb-wrap {
+    position: relative;
+  }
+  .photo-item img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
+  }
+  .photo-item .remove-btn {
+    position: absolute;
+    top: 2px; right: 2px;
+    background: rgba(0,0,0,0.65);
+    color: white;
+    border: none;
+    width: 24px; height: 24px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .photo-item .desc-wrap {
+    display: flex;
+    flex-direction: column;
+  }
+  .photo-item .desc-wrap label {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .photo-item textarea {
+    margin-top: 0;
+    min-height: 76px;
+    resize: vertical;
+    font-size: 14px;
+  }
+
+  .big-btn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .big-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+  .secondary-btn {
+    background: white;
+    color: #2563eb;
+    border: 2px solid #2563eb;
+  }
+
+  /* 교사 화면 */
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .toolbar button {
+    padding: 10px 14px;
+    border: 2px solid #e5e7eb;
+    background: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .submission {
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+  }
+  .submission .info-top {
+    padding: 12px 14px 6px;
+  }
+  .submission .info-top .who {
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .submission .info-top .memo {
+    color: #4b5563;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  .submission .info-top .time {
+    color: #9ca3af;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .photo-list {
+    display: grid;
+    gap: 8px;
+    padding: 8px 12px 12px;
+  }
+  .photo-block {
+    border: 1px solid #f3f4f6;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .photo-block img {
+    width: 100%;
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    cursor: pointer;
+    display: block;
+  }
+  .photo-block .ph-desc {
+    padding: 6px 10px;
+    font-size: 13px;
+    color: #374151;
+    background: #fafafa;
+    min-height: 28px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .photo-block .ph-desc.empty {
+    color: #9ca3af;
+    font-style: italic;
+  }
+  .submission .del {
+    width: 100%;
+    padding: 10px;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    border-top: 1px solid #fee2e2;
+    margin-top: auto;
+  }
+
+  /* 큰 사진 보기 */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .lightbox img {
+    max-width: 100%;
+    max-height: 80%;
+    border-radius: 8px;
+  }
+  .lightbox .lb-desc {
+    color: white;
+    margin-top: 14px;
+    max-width: 700px;
+    font-size: 15px;
+    text-align: center;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .lightbox .close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: white;
+    color: black;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    z-index: 200;
+  }
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #9ca3af;
+  }
+  .hint { font-size: 13px; color: #6b7280; margin-top: 6px; }
+
+  @media (max-width: 480px) {
+    .photo-item {
+      grid-template-columns: 1fr;
+    }
+    .photo-item img { width: 100%; height: 180px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="titleEl">앱 제목</h1>
+  <div id="statusBadge">📝 혼자 쓰기 모드</div>
+</header>
+
+<main>
+  <!-- 역할 선택 -->
+  <section id="screen-role">
+    <div class="role-pick">
+      <button class="role-btn" onclick="goStudent()">🌱 학생</button>
+      <button class="role-btn" onclick="goTeacherLogin()">👩‍🏫 교사</button>
+    </div>
+  </section>
+
+  <!-- 학생 화면 -->
+  <section id="screen-student" class="hidden">
+    <div class="notice" id="studentNotice"></div>
+
+    <label for="stuName">이름</label>
+    <input type="text" id="stuName" placeholder="예: 김민서" />
+
+    <label for="stuNo">번호</label>
+    <input type="text" id="stuNo" inputmode="numeric" placeholder="예: 15" />
+
+    <label>사진과 사진별 설명 (최대 4장)</label>
+    <div class="file-area">
+      <div class="pick">
+        <label class="fileLabel" for="stuFiles">📷 사진 추가하기</label>
+        <input type="file" id="stuFiles" accept="image/*" multiple capture="environment" />
+        <div class="hint" id="fileMsg">사진을 추가하면 사진마다 설명을 적을 수 있어요</div>
+      </div>
+      <div class="photo-items" id="photoItems"></div>
+    </div>
+
+    <label for="stuMemo">전체 한 줄 메모 (선택)</label>
+    <input type="text" id="stuMemo" placeholder="예: 일주일째 관찰 중입니다" />
+
+    <button class="big-btn" id="submitBtn" onclick="submitStudent()">제출하기</button>
+    <button class="big-btn secondary-btn" onclick="goRole()">처음으로</button>
+  </section>
+
+  <!-- 교사 로그인 -->
+  <section id="screen-teacher-login" class="hidden">
+    <label for="pwInput">교사 비밀번호</label>
+    <input type="password" id="pwInput" placeholder="비밀번호를 입력하세요" />
+    <button class="big-btn" onclick="teacherLogin()">로그인</button>
+    <button class="big-btn secondary-btn" onclick="goRole()">처음으로</button>
+  </section>
+
+  <!-- 교사 화면 -->
+  <section id="screen-teacher" class="hidden">
+    <div class="toolbar">
+      <button onclick="changePassword()">🔑 비밀번호 변경</button>
+      <button onclick="exportData()">📁 데이터 내보내기</button>
+      <button onclick="goRole()">처음으로</button>
+    </div>
+    <div id="teacherList"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+/* =========================================================
+   초기화
+   ========================================================= */
+document.getElementById('titleEl').textContent = APP_CONFIG.title;
+document.getElementById('studentNotice').textContent = APP_CONFIG.studentNotice;
+
+let useFirebase = false;
+let db = null;
+
+(function initFirebase() {
+  try {
+    const hasConfig = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.databaseURL;
+    if (!hasConfig) { setStatus('local'); return; }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    db.ref('.info/connected').on('value', snap => {
+      setStatus(snap.val() === true ? 'ok' : 'fail');
+    });
+    useFirebase = true;
+  } catch (e) {
+    console.error(e);
+    setStatus('fail');
+  }
+})();
+
+function setStatus(state) {
+  const el = document.getElementById('statusBadge');
+  if (state === 'local') el.textContent = '📝 혼자 쓰기 모드';
+  else if (state === 'ok') el.textContent = '✅ 실시간 연결됨';
+  else el.textContent = '❌ 연결 실패 — 설정값 확인';
+}
+
+/* =========================================================
+   화면 전환
+   ========================================================= */
+function showOnly(id) {
+  document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+function goRole() { showOnly('screen-role'); }
+function goStudent() {
+  resetStudentForm();
+  showOnly('screen-student');
+}
+function goTeacherLogin() {
+  document.getElementById('pwInput').value = '';
+  showOnly('screen-teacher-login');
+}
+
+/* =========================================================
+   사진 압축
+   ========================================================= */
+function compressImage(file, maxSize = 800, quality = 0.5) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round(height * maxSize / width);
+          width = maxSize;
+        } else if (height > maxSize) {
+          width = Math.round(width * maxSize / height);
+          height = maxSize;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+        let q = quality;
+        let dataUrl = canvas.toDataURL('image/jpeg', q);
+        while (dataUrl.length > 200 * 1024 * 1.37 && q > 0.15) {
+          q -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', q);
+        }
+        resolve(dataUrl);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* =========================================================
+   학생 — 사진+설명 입력
+   ========================================================= */
+// 각 항목: { src, desc }
+let photoEntries = [];
+
+document.getElementById('stuFiles').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
+
+  const room = 4 - photoEntries.length;
+  if (room <= 0) {
+    toast('사진은 최대 4장까지만 올릴 수 있어요');
+    e.target.value = '';
+    return;
+  }
+
+  document.getElementById('fileMsg').textContent = '사진을 압축하는 중...';
+  const toProcess = files.slice(0, room);
+  for (const f of toProcess) {
+    try {
+      const src = await compressImage(f);
+      photoEntries.push({ src, desc: '' });
+    } catch (err) {
+      console.error(err);
+      toast('사진 처리에 실패했어요');
+    }
+  }
+  renderPhotoItems();
+  e.target.value = '';
+  updateFileMsg();
+});
+
+function updateFileMsg() {
+  const n = photoEntries.length;
+  document.getElementById('fileMsg').textContent =
+    n === 0 ? '사진을 추가하면 사진마다 설명을 적을 수 있어요'
+            : `${n} / 4 장 — 사진마다 설명을 적어 주세요`;
+}
+
+function renderPhotoItems() {
+  const wrap = document.getElementById('photoItems');
+  wrap.innerHTML = '';
+  photoEntries.forEach((entry, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-item';
+    div.innerHTML = `
+      <div class="thumb-wrap">
+        <img src="${entry.src}" alt="사진 ${i+1}" />
+        <button type="button" class="remove-btn" data-index="${i}" title="이 사진 삭제">×</button>
+      </div>
+      <div class="desc-wrap">
+        <label>사진 ${i+1} 설명</label>
+        <textarea data-index="${i}" placeholder="이 사진에 대한 설명을 적어 주세요 (예: 떡잎이 두 장 나왔습니다)">${escapeHtml(entry.desc)}</textarea>
+      </div>
+    `;
+    wrap.appendChild(div);
+  });
+  // 설명 입력 동기화
+  wrap.querySelectorAll('textarea').forEach(ta => {
+    ta.addEventListener('input', e => {
+      const i = parseInt(e.target.dataset.index, 10);
+      if (photoEntries[i]) photoEntries[i].desc = e.target.value;
+    });
+  });
+  // 삭제
+  wrap.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const i = parseInt(e.target.dataset.index, 10);
+      photoEntries.splice(i, 1);
+      renderPhotoItems();
+      updateFileMsg();
+    });
+  });
+}
+
+function resetStudentForm() {
+  photoEntries = [];
+  document.getElementById('stuName').value = '';
+  document.getElementById('stuNo').value = '';
+  document.getElementById('stuMemo').value = '';
+  document.getElementById('photoItems').innerHTML = '';
+  updateFileMsg();
+}
+
+async function submitStudent() {
+  const name = document.getElementById('stuName').value.trim();
+  const no = document.getElementById('stuNo').value.trim();
+  const memo = document.getElementById('stuMemo').value.trim();
+
+  if (!name) { toast('이름을 입력하세요'); return; }
+  if (!no) { toast('번호를 입력하세요'); return; }
+  if (photoEntries.length === 0) { toast('사진을 1장 이상 올리세요'); return; }
+
+  const submission = {
+    name, no, memo,
+    photos: photoEntries.map(e => ({ src: e.src, desc: e.desc.trim() })),
+    createdAt: Date.now()
+  };
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '제출 중...';
+
+  try {
+    await saveSubmission(submission);
+    toast('제출 완료!');
+    resetStudentForm();
+    setTimeout(goRole, 800);
+  } catch (e) {
+    console.error(e);
+    toast('제출 실패: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '제출하기';
+  }
+}
+
+/* =========================================================
+   저장 / 읽기 (Firebase or localStorage)
+   ========================================================= */
+const LS_KEY = 'photo_submissions_v2';     // photos 구조로 바뀌어 v2
+const LS_PW_KEY = 'photo_teacher_pw_v1';
+
+async function saveSubmission(sub) {
+  if (useFirebase && db) {
+    const ref = db.ref('submissions').push();
+    await ref.set(sub);
+  } else {
+    const list = loadLocal();
+    sub._id = 'L' + Date.now() + Math.random().toString(36).slice(2,6);
+    list.push(sub);
+    localStorage.setItem(LS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new Event('local-data-changed'));
+  }
+}
+
+function loadLocal() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+async function deleteSubmission(id) {
+  if (useFirebase && db) {
+    await db.ref('submissions/' + id).remove();
+  } else {
+    const list = loadLocal().filter(x => x._id !== id);
+    localStorage.setItem(LS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new Event('local-data-changed'));
+  }
+}
+
+/* =========================================================
+   교사 화면
+   ========================================================= */
+function currentPassword() {
+  return localStorage.getItem(LS_PW_KEY) || APP_CONFIG.teacherInitialPassword;
+}
+
+function teacherLogin() {
+  const v = document.getElementById('pwInput').value;
+  if (v === currentPassword()) enterTeacher();
+  else toast('비밀번호가 틀렸어요');
+}
+
+function enterTeacher() {
+  showOnly('screen-teacher');
+  startListening();
+}
+
+function changePassword() {
+  const oldPw = prompt('현재 비밀번호를 입력하세요');
+  if (oldPw === null) return;
+  if (oldPw !== currentPassword()) { toast('현재 비밀번호가 틀렸어요'); return; }
+  const newPw = prompt('새 비밀번호를 입력하세요 (4자 이상)');
+  if (newPw === null) return;
+  if (!newPw || newPw.length < 4) { toast('4자 이상으로 입력하세요'); return; }
+  localStorage.setItem(LS_PW_KEY, newPw);
+  toast('비밀번호가 변경되었습니다');
+}
+
+let _listening = false;
+function startListening() {
+  renderTeacher([]);
+  if (useFirebase && db) {
+    db.ref('submissions').on('value', snap => {
+      const v = snap.val() || {};
+      const list = Object.entries(v).map(([id, data]) => ({ ...data, _id: id }));
+      list.sort((a,b) => b.createdAt - a.createdAt);
+      renderTeacher(list);
+    });
+  } else {
+    const refresh = () => {
+      const list = loadLocal().slice().sort((a,b) => b.createdAt - a.createdAt);
+      renderTeacher(list);
+    };
+    refresh();
+    if (!_listening) {
+      window.addEventListener('local-data-changed', refresh);
+      window.addEventListener('storage', refresh);
+      _listening = true;
+    }
+  }
+}
+
+function renderTeacher(list) {
+  const wrap = document.getElementById('teacherList');
+  if (list.length === 0) {
+    wrap.innerHTML = `<div class="empty">아직 제출된 사진이 없습니다.<br><small>학생이 제출하면 여기에 실시간으로 나타납니다.</small></div>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="card-grid">${list.map(item => {
+    const photos = item.photos || [];
+    return `
+      <div class="submission">
+        <div class="info-top">
+          <div class="who">${escapeHtml(item.no)}번 ${escapeHtml(item.name)}</div>
+          ${item.memo ? `<div class="memo">📝 ${escapeHtml(item.memo)}</div>` : ''}
+          <div class="time">${formatTime(item.createdAt)}</div>
+        </div>
+        <div class="photo-list">
+          ${photos.map((p, idx) => `
+            <div class="photo-block">
+              <img src="${p.src}" data-sub="${item._id}" data-idx="${idx}" />
+              <div class="ph-desc ${p.desc ? '' : 'empty'}">${p.desc ? escapeHtml(p.desc) : '(설명 없음)'}</div>
+            </div>
+          `).join('')}
+        </div>
+        <button class="del" data-id="${item._id}">삭제</button>
+      </div>
+    `;
+  }).join('')}</div>`;
+
+  // 사진 클릭 → 큰 보기
+  wrap.querySelectorAll('.photo-block img').forEach(img => {
+    img.addEventListener('click', () => {
+      const subId = img.dataset.sub;
+      const idx = parseInt(img.dataset.idx, 10);
+      const sub = list.find(x => x._id === subId);
+      if (!sub) return;
+      const p = (sub.photos || [])[idx];
+      if (!p) return;
+      openLightbox(p.src, p.desc, sub.name, idx + 1);
+    });
+  });
+  // 삭제
+  wrap.querySelectorAll('.del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if (confirm('이 제출을 삭제할까요?')) {
+        deleteSubmission(id).then(() => toast('삭제되었습니다'));
+      }
+    });
+  });
+}
+
+function exportData() {
+  if (useFirebase && db) {
+    toast('실시간 모드에서는 콘솔에서 내려받으세요');
+    return;
+  }
+  const list = loadLocal();
+  const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `submissions_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* =========================================================
+   큰 사진 보기 (설명 포함)
+   ========================================================= */
+function openLightbox(src, desc, who, n) {
+  const div = document.createElement('div');
+  div.className = 'lightbox';
+  div.innerHTML = `
+    <button class="close">×</button>
+    <img src="${src}" />
+    <div class="lb-desc">
+      <strong>${escapeHtml(who)} · 사진 ${n}</strong><br>
+      ${desc ? escapeHtml(desc) : '<em style="color:#9ca3af">(설명 없음)</em>'}
+    </div>
+  `;
+  div.onclick = () => div.remove();
+  document.body.appendChild(div);
+}
+
+/* =========================================================
+   기타
+   ========================================================= */
+function formatTime(ts) {
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.add('hidden'), 2200);
+}
+
+goRole();
+</script>
+
+</body>
+</html>
